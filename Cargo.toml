@@ -1,0 +1,12 @@
+[project]
+
+name = "crustybot"
+version = "0.0.1"
+authors = ["Peter Elmers <peter.elmers@yahoo.com>"]
+
+[lib]
+name = "crustybot"
+
+[[bin]]
+name = "logger"
+path = "src/examples/logger/main.rs"
