@@ -1,11 +1,11 @@
 [project]
 
-name = "crustybot"
+name = "crustirc"
 version = "0.0.1"
 authors = ["Peter Elmers <peter.elmers@yahoo.com>"]
 
 [lib]
-name = "crustybot"
+name = "crustirc"
 
 [[bin]]
 name = "logger"

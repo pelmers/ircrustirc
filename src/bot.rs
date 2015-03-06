@@ -22,7 +22,7 @@ pub enum Action {
     Whois(Vec<String>),
     Setname(String),
     Privmsg(String, String),
-    ActionChain(Vec<Action>)
+    ActionVec(Vec<Action>)
 }
 
 pub struct BotInfo<'a> {
@@ -63,28 +63,32 @@ impl<'a, L: CrustyListener> CrustyBot<'a, L> {
         self.stream.read(self.recvbuf.as_mut_slice())
     }
 
-    // Perform the given action.
+    // Handle the given action.
     fn dispatch_action(&mut self, action: Action) {
-        let reply_needed = match action {
+        // branches that return do not expect immediate reply from the server
+        match action {
             Action::Join(ref channels) => {
                 for ch in channels {
                     self.join(ch.as_slice());
                 }
-                true
             },
-            _ => false
-        };
-        if reply_needed {
-            if let Ok(msg) = self.try_receive() {
-                let action = self.listener.on_reply(msg, action);
-                self.dispatch_action(action);
+            Action::ActionVec(actions) => {
+                for act in actions {
+                    self.dispatch_action(act);
+                }
+                return;
             }
+            _ => ()
+        };
+        if let Ok(msg) = self.try_receive() {
+            let action = self.listener.on_reply(msg, action);
+            self.dispatch_action(action);
         }
     }
 
     // Parse the response string from the server and dispatch to the listener.
     fn dispatch_response(&mut self, resp: String) {
-        println!("{}", resp);
+        println!("Dispatch: {}", resp);
     }
 
     // Continuously read until end, return byte vec
@@ -143,7 +147,7 @@ impl<'a, L: CrustyListener> CrustyBot<'a, L> {
         if let Ok(msg) = self.try_receive() {
             let lines = msg.as_slice().split_str('\n');
             for cmd in lines {
-                self.dispatch_response(cmd.to_string());
+                self.dispatch_response(String::from_str(cmd));
             }
         }
     }

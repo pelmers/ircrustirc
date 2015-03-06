@@ -10,7 +10,7 @@ impl CrustyListener for EchoListener {
         Action::NoOp
     }
     fn on_connect(&mut self) -> Action {
-        Action::Join(vec!["#testing".to_string()])
+        Action::Join(vec![String::from_str("#testing")])
     }
 }
 
