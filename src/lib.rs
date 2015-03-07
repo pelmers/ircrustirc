@@ -1,8 +1,10 @@
 #![feature(net)]
 #![feature(io)]
 
-pub mod bot;
-pub mod listener;
-pub use bot::{CrustyBot, BotInfo, Action};
-pub use listener::{CrustyListener};
+mod action;
+mod listener;
+mod bot;
+pub use bot::{CrustyBot, BotInfo};
+pub use listener::CrustyListener;
+pub use action::{Action};
 

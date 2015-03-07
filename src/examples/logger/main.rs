@@ -1,11 +1,11 @@
-extern crate crustybot;
+extern crate crustirc;
 
-use crustybot::{CrustyBot, Action, CrustyListener, BotInfo};
+use crustirc::{CrustyBot, Action, CrustyListener, BotInfo};
 
 pub struct EchoListener;
 
 impl CrustyListener for EchoListener {
-    fn on_reply(&mut self, msg: String, _: Action) -> Action {
+    fn on_reply(&mut self, msg: &str, _: Action) -> Action {
         print!("{}", msg);
         Action::NoOp
     }
