@@ -5,10 +5,6 @@ use crustirc::{CrustyBot, Action, CrustyListener, BotInfo};
 pub struct EchoListener;
 
 impl CrustyListener for EchoListener {
-    fn on_reply(&mut self, msg: &str, _: Action) -> Action {
-        print!("{}", msg);
-        Action::NoOp
-    }
     fn on_connect(&mut self) -> Action {
         Action::Join(vec![String::from_str("#testing")])
     }

@@ -18,13 +18,22 @@ pub struct CrustyBot<'a, L: CrustyListener> {
     recvbuf: [u8; 1024]
 }
 
-mod parse {
+pub mod parse {
     use ::std::str;
     use ::std::str::{Pattern, Searcher};
+    pub struct Response<'a> {
+        pub prefix: Option<&'a str>,
+        pub command: &'a str,
+        pub params: Option<&'a str>,
+        pub trail: Option<&'a str>
+    }
+    pub struct User<'a> {
+        pub nick: Option<&'a str>,
+        pub host: &'a str
+    }
     // format: [:PREFIX] [TARGET] COMMAND [:TRAIL]
     // prefix and message can have : in front
-    pub fn parse_response(resp: &str) ->
-            (Option<&str>, &str, Option<&str>, Option<&str>) {
+    pub fn parse_response(resp: &str) -> Response {
         let bytes = resp.as_bytes();
         let prefix_end = if bytes[0] == b':' {
             (0..bytes.len()).find(|i| bytes[*i] == b' ').unwrap_or(1)
@@ -61,8 +70,23 @@ mod parse {
         } else {
             None
         };
-        // so prefix is everything from cmd_end to trail_start
-        (prefix, cmd, params, trail)
+        Response{prefix: prefix, command: cmd, params: params, trail: trail}
+    }
+    pub fn prefix_to_user(prefix: &str) -> User {
+        let b = prefix.as_bytes();
+        let ex = (0..b.len()).find(|i| b[*i] == b'!');
+        User{
+            nick: if let Some(i) = ex {
+                Some(slice_to_str(b, 0, i))
+            } else {
+                None
+            },
+            host: if let Some(i) = ex {
+                slice_to_str(b, i+1, b.len())
+            } else {
+                prefix
+            }
+        }
     }
     fn slice_to_str(bytes: &[u8], lo: usize, hi: usize) -> &str {
         str::from_utf8(&bytes[lo..hi]).unwrap_or("")
@@ -83,8 +107,9 @@ impl<'a, L: CrustyListener> CrustyBot<'a, L> {
         }
     }
 
-    // Send raw data to server.
+    // Send string on TcpStream to server.
     fn send_raw(&mut self, raw: &str) -> io::Result<()> {
+        print!("-> {}", raw);
         self.stream.write_all(raw.as_bytes())
     }
 
@@ -92,15 +117,8 @@ impl<'a, L: CrustyListener> CrustyBot<'a, L> {
     fn dispatch_action(&mut self, action: Action) {
         // branches that return do not expect immediate reply from the server
         if let Some(cmd) = action.to_command() {
-            print!("Sending: {}", cmd);
             if let Err(e) = self.send_raw(cmd.as_slice()) {
                 let action = self.listener.on_ioerror(e, &action);
-                self.dispatch_action(action);
-            }
-        }
-        if action.expects_reply() {
-            if let Ok(msg) = self.try_receive() {
-                let action = self.listener.on_reply(&msg, action);
                 self.dispatch_action(action);
             }
         }
@@ -108,15 +126,29 @@ impl<'a, L: CrustyListener> CrustyBot<'a, L> {
 
     // Parse the response string from the server and dispatch to the listener.
     fn dispatch_response(&mut self, resp: &str) {
-        println!("{}", resp);
-        let (prefix, cmd, params, trail) = parse::parse_response(resp);
-        println!("PRE: {:?}, CMD: {:?}, PAR: {:?}, TRL: {:?}", prefix, cmd, params, trail);
-        let action = match cmd {
-            "PRIVMSG" => self.listener.on_msg(prefix.unwrap_or(""),
-                                              params.unwrap_or(""),
-                                              trail.unwrap_or("")),
-            "PING" => self.listener.on_ping(trail.unwrap_or("")),
-            _ => self.listener.on_other(prefix, cmd, params, trail),
+        println!("<- {}", resp);
+        let r = parse::parse_response(resp);
+        let action = match r.command {
+            "PRIVMSG" => self.listener.on_msg(r.prefix.unwrap_or(""),
+                                              r.params.unwrap_or(""),
+                                              r.trail.unwrap_or("")),
+            "NOTICE" => self.listener.on_notice(r.prefix.unwrap_or(""),
+                                                r.params.unwrap_or(""),
+                                                r.trail.unwrap_or("")),
+            "PING" => self.listener.on_ping(r.trail.unwrap_or("")),
+            "JOIN" => self.listener.on_join(r.prefix.unwrap_or(""),
+                                            r.params.unwrap_or("")),
+            "PART" => self.listener.on_part(r.prefix.unwrap_or(""),
+                                            r.params.unwrap_or(""),
+                                            r.trail),
+            "KICK" => self.listener.on_kick(r.prefix.unwrap_or(""),
+                                            r.params.unwrap_or(""),
+                                            r.trail),
+            "TOPIC" => self.listener.on_topic(r.prefix.unwrap_or(""),
+                                              r.params.unwrap_or(""),
+                                              r.trail.unwrap_or("")),
+            "ERROR" => self.listener.on_error(r.trail.unwrap_or("")),
+            _ => self.listener.on_other(r.prefix, r.command, r.params, r.trail),
         };
         self.dispatch_action(action);
     }
@@ -152,7 +184,8 @@ impl<'a, L: CrustyListener> CrustyBot<'a, L> {
     pub fn connect(&mut self, password: Option<&str>) -> io::Result<()> {
         // Send the password if we need it
         match password {
-            Some(p) => try!(self.send_raw(format!("PASS {} \r\n", p).as_slice())),
+            Some(p) => try!(self.send_raw(
+                            format!("PASS {} \r\n", p).as_slice())),
             _ => ()
         }
         let usercmd = format!("USER {} {} {} :{}\r\n",
