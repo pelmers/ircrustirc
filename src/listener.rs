@@ -1,6 +1,7 @@
 use action::Action;
 use action::Action::*;
 use std::io;
+use bot::parse::split_user_chan;
 
 pub trait CrustyListener {
     fn on_connect(&mut self) -> Action {
@@ -23,6 +24,10 @@ pub trait CrustyListener {
     }
     fn on_kick(&mut self, source: &str, kicked: &str, reason: Option<&str>) -> Action {
         NoOp
+    }
+    fn on_invite(&mut self, source: &str, target: &str) -> Action {
+        let (_, chan) = split_user_chan(target);
+        Join(vec![chan.to_string()])
     }
     fn on_ping(&mut self, token: &str) -> Action {
         Pong(token.to_string())

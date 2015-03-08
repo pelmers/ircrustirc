@@ -7,5 +7,5 @@ mod bot;
 pub use bot::{CrustyBot, BotInfo};
 pub use listener::CrustyListener;
 pub use action::{Action};
-pub use bot::parse::prefix_to_user;
+pub use bot::parse::{prefix_to_user, split_user_chan};
 

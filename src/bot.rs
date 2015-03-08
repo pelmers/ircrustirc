@@ -21,75 +21,74 @@ pub struct CrustyBot<'a, L: CrustyListener> {
 pub mod parse {
     use ::std::str;
     use ::std::str::{Pattern, Searcher};
+
+    #[derive(Debug)]
     pub struct Response<'a> {
         pub prefix: Option<&'a str>,
         pub command: &'a str,
         pub params: Option<&'a str>,
         pub trail: Option<&'a str>
     }
+
     pub struct User<'a> {
         pub nick: Option<&'a str>,
         pub host: &'a str
     }
-    // format: [:PREFIX] [TARGET] COMMAND [:TRAIL]
-    // prefix and message can have : in front
+
+    // parse resposne line of format: [:PREFIX] COMMAND [PARAMS] [:TRAIL]
     pub fn parse_response(resp: &str) -> Response {
-        let bytes = resp.as_bytes();
-        let prefix_end = if bytes[0] == b':' {
-            (0..bytes.len()).find(|i| bytes[*i] == b' ').unwrap_or(1)
+        // start of trail
+        let trail_i = resp.find(" :").unwrap_or(resp.len());
+        // end of prefix
+        let prefix_i = if &resp[0..1] == ":" {
+            resp.find(" ").unwrap() + 1
         } else {
             0
         };
-        let trail_start = {
-            let mut search = " :".into_searcher(resp);
-            // If we find " :" then the response has a trail
-            if let Some((_, end))  = search.next_match() {
-                end
-            } else {
-                bytes.len()
-            }
+        // end of command
+        let cmd_i = match resp[prefix_i..trail_i].find(" ") {
+            Some(i) => prefix_i + i,
+            None => trail_i
         };
-        let cmd_end = (prefix_end+1..trail_start).find(
-                                |i| bytes[*i] == b' ').unwrap_or(trail_start);
-        // now turn the bounds into slices
-        let prefix = if prefix_end > 0 {
-            Some(slice_to_str(bytes, 1, prefix_end))
+        let prefix = if prefix_i != 0 {
+            Some(&resp[1..prefix_i-1])
         } else {
             None
         };
-        let trail = if trail_start < bytes.len() {
-            Some(slice_to_str(bytes, trail_start, bytes.len()-1))
+        let cmd = &resp[prefix_i..cmd_i];
+        let params = if cmd_i < trail_i {
+            Some(&resp[cmd_i+1..trail_i])
         } else {
             None
         };
-        let cmd = slice_to_str(bytes,
-                               if prefix_end > 0 { prefix_end + 1} else { 0 },
-                               cmd_end);
-        let params = if cmd_end + 1 < trail_start - 2 {
-            Some(slice_to_str(bytes, cmd_end + 1, trail_start - 2))
+        let trail = if trail_i < resp.len() {
+            Some(&resp[trail_i+2..])
         } else {
             None
         };
         Response{prefix: prefix, command: cmd, params: params, trail: trail}
     }
+
+    // Return User from a prefix like me!www.domain.example
     pub fn prefix_to_user(prefix: &str) -> User {
-        let b = prefix.as_bytes();
-        let ex = (0..b.len()).find(|i| b[*i] == b'!');
+        let ex = prefix.find("!");
         User{
             nick: if let Some(i) = ex {
-                Some(slice_to_str(b, 0, i))
+                Some(&prefix[0..i])
             } else {
                 None
             },
             host: if let Some(i) = ex {
-                slice_to_str(b, i+1, b.len())
+                &prefix[i+1..]
             } else {
                 prefix
             }
         }
     }
-    fn slice_to_str(bytes: &[u8], lo: usize, hi: usize) -> &str {
-        str::from_utf8(&bytes[lo..hi]).unwrap_or("")
+    // Split user_chan into first (word, rest).
+    pub fn split_user_chan(user_chan: &str) -> (&str, &str) {
+        let x = user_chan.find(" ").unwrap_or(user_chan.len());
+        (&user_chan[..x], &user_chan[x+1..])
     }
 }
 
@@ -115,7 +114,6 @@ impl<'a, L: CrustyListener> CrustyBot<'a, L> {
 
     // Handle the given action.
     fn dispatch_action(&mut self, action: Action) {
-        // branches that return do not expect immediate reply from the server
         if let Some(cmd) = action.to_command() {
             if let Err(e) = self.send_raw(cmd.as_slice()) {
                 let action = self.listener.on_ioerror(e, &action);
@@ -144,6 +142,8 @@ impl<'a, L: CrustyListener> CrustyBot<'a, L> {
             "KICK" => self.listener.on_kick(r.prefix.unwrap_or(""),
                                             r.params.unwrap_or(""),
                                             r.trail),
+            "INVITE" => self.listener.on_invite(r.prefix.unwrap_or(""),
+                                                r.params.unwrap_or("")),
             "TOPIC" => self.listener.on_topic(r.prefix.unwrap_or(""),
                                               r.params.unwrap_or(""),
                                               r.trail.unwrap_or("")),
@@ -155,7 +155,7 @@ impl<'a, L: CrustyListener> CrustyBot<'a, L> {
 
     // Read up to 1024 bytes from server into recvbuf
     fn read(&mut self) -> io::Result<usize> {
-        self.stream.read(self.recvbuf.as_mut_slice())
+        self.stream.read(&mut self.recvbuf)
     }
 
     // Continuously read until end, return byte vec
@@ -208,8 +208,7 @@ impl<'a, L: CrustyListener> CrustyBot<'a, L> {
     fn listen_once(&mut self) -> bool {
         match self.try_receive() {
             Ok(msg) => {
-                let lines = msg.as_slice().split("\n");
-                for cmd in lines.filter(|c| !c.is_empty()) {
+                for cmd in msg.as_slice().lines_any().filter(|c| !c.is_empty()) {
                     self.dispatch_response(cmd);
                 }
                 !msg.is_empty()
