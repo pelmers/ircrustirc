@@ -8,5 +8,5 @@ authors = ["Peter Elmers <peter.elmers@yahoo.com>"]
 name = "crustirc"
 
 [[bin]]
-name = "logger"
-path = "src/examples/logger/main.rs"
+name = "debugbot"
+path = "src/examples/debug/main.rs"

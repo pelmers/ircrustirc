@@ -2,11 +2,11 @@ extern crate crustirc;
 
 use crustirc::{CrustyBot, Action, CrustyListener, BotInfo};
 
-pub struct EchoListener;
+pub struct DebugListener;
 
-impl CrustyListener for EchoListener {
+impl CrustyListener for DebugListener {
     fn on_connect(&mut self) -> Action {
-        Action::Join(vec![String::from_str("#testing")])
+        Action::Join(vec![format!("#testing")])
     }
 }
 
@@ -16,7 +16,7 @@ fn main() {
         hostname: "localhost",
         servername: "crusty.bot",
         realname: "crusty",
-    }, "localhost:6667", EchoListener).unwrap();
+    }, "localhost:6667", DebugListener, true).unwrap();
     let _ = bot.connect(None);
     bot.listen();
 }

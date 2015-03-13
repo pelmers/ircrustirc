@@ -7,26 +7,26 @@ pub trait CrustyListener {
     fn on_connect(&mut self) -> Action {
         NoOp
     }
-    fn on_notice(&mut self, source: &str, target: &str, msg: &str) -> Action {
+    fn on_notice(&mut self, _source: &str, _target: &str, _msg: &str) -> Action {
         NoOp
     }
-    fn on_msg(&mut self, source: &str, target: &str, msg: &str) -> Action {
+    fn on_msg(&mut self, _source: &str, _target: &str, _msg: &str) -> Action {
         NoOp
     }
-    fn on_join(&mut self, source: &str, channel: &str) -> Action {
+    fn on_join(&mut self, _source: &str, _channel: &str) -> Action {
         NoOp
     }
-    fn on_part(&mut self, source: &str, channel: &str, msg: Option<&str>) -> Action {
+    fn on_part(&mut self, _source: &str, _channel: &str, _msg: Option<&str>) -> Action {
         NoOp
     }
-    fn on_topic(&mut self, source: &str, channel: &str, topic: &str) -> Action {
+    fn on_topic(&mut self, _source: &str, _channel: &str, _topic: &str) -> Action {
         NoOp
     }
-    fn on_kick(&mut self, source: &str, kicked: &str, reason: Option<&str>) -> Action {
+    fn on_kick(&mut self, _source: &str, _kicked: &str, _reason: Option<&str>) -> Action {
         NoOp
     }
-    fn on_invite(&mut self, source: &str, target: &str) -> Action {
-        let (_, chan) = split_user_chan(target);
+    fn on_invite(&mut self, _source: &str, _target: &str) -> Action {
+        let (_, chan) = split_user_chan(_target);
         Join(vec![chan.to_string()])
     }
     fn on_ping(&mut self, token: &str) -> Action {
@@ -35,10 +35,10 @@ pub trait CrustyListener {
     fn on_error(&mut self, msg: &str) -> Action {
         Quit(Some(format!("Error: {}", msg)))
     }
-    fn on_other(&mut self, prefix: Option<&str>, command: &str, params: Option<&str>, trail: Option<&str>) -> Action {
+    fn on_other(&mut self, _prefix: Option<&str>, _command: &str, _params: Option<&str>, _trail: Option<&str>) -> Action {
         NoOp
     }
-    fn on_ioerror(&mut self, error: io::Error, cause: &Action) -> Action {
+    fn on_ioerror(&mut self, error: io::Error, _cause: &Action) -> Action {
         Quit(Some(format!("Error: {:?}", error)))
     }
 }

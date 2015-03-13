@@ -15,13 +15,11 @@ pub struct CrustyBot<'a, L: CrustyListener> {
     info: BotInfo<'a>,
     stream: TcpStream,
     listener: L,
+    verbose: bool,
     recvbuf: [u8; 1024]
 }
 
 pub mod parse {
-    use ::std::str;
-    use ::std::str::{Pattern, Searcher};
-
     #[derive(Debug)]
     pub struct Response<'a> {
         pub prefix: Option<&'a str>,
@@ -35,17 +33,17 @@ pub mod parse {
         pub host: &'a str
     }
 
-    // parse resposne line of format: [:PREFIX] COMMAND [PARAMS] [:TRAIL]
+    // Parse resposne line of format: [:PREFIX] COMMAND [PARAMS] [:TRAIL]
     pub fn parse_response(resp: &str) -> Response {
-        // start of trail
+        // start of trail portion
         let trail_i = resp.find(" :").unwrap_or(resp.len());
-        // end of prefix
+        // end of prefix portion
         let prefix_i = if &resp[0..1] == ":" {
             resp.find(" ").unwrap() + 1
         } else {
             0
         };
-        // end of command
+        // end of command portion
         let cmd_i = match resp[prefix_i..trail_i].find(" ") {
             Some(i) => prefix_i + i,
             None => trail_i
@@ -94,13 +92,18 @@ pub mod parse {
 
 impl<'a, L: CrustyListener> CrustyBot<'a, L> {
     // Create bot struct, establish connection to addr
-    pub fn new<A: ToSocketAddrs + ?Sized>(info: BotInfo<'a>, addr: &A, listener: L) -> io::Result<CrustyBot<'a, L>> {
+    pub fn new<A: ToSocketAddrs + ?Sized>(info: BotInfo<'a>,
+                                          addr: &A,
+                                          listener: L,
+                                          verbose: bool)
+                                          -> io::Result<CrustyBot<'a, L>> {
         match TcpStream::connect(addr) {
             Ok(stream) => Ok(CrustyBot{
                 info: info,
                 stream: stream,
                 listener: listener,
-                recvbuf: [0; 1024]
+                recvbuf: [0; 1024],
+                verbose: verbose
             }),
             Err(e) => Err(e)
         }
@@ -108,14 +111,16 @@ impl<'a, L: CrustyListener> CrustyBot<'a, L> {
 
     // Send string on TcpStream to server.
     fn send_raw(&mut self, raw: &str) -> io::Result<()> {
-        print!("-> {}", raw);
+        if self.verbose {
+            print!("-> {}", raw);
+        }
         self.stream.write_all(raw.as_bytes())
     }
 
     // Handle the given action.
     fn dispatch_action(&mut self, action: Action) {
         if let Some(cmd) = action.to_command() {
-            if let Err(e) = self.send_raw(cmd.as_slice()) {
+            if let Err(e) = self.send_raw(&cmd[..]) {
                 let action = self.listener.on_ioerror(e, &action);
                 self.dispatch_action(action);
             }
@@ -124,7 +129,9 @@ impl<'a, L: CrustyListener> CrustyBot<'a, L> {
 
     // Parse the response string from the server and dispatch to the listener.
     fn dispatch_response(&mut self, resp: &str) {
-        println!("<- {}", resp);
+        if self.verbose {
+            println!("<- {}", resp);
+        }
         let r = parse::parse_response(resp);
         let action = match r.command {
             "PRIVMSG" => self.listener.on_msg(r.prefix.unwrap_or(""),
@@ -163,7 +170,7 @@ impl<'a, L: CrustyListener> CrustyBot<'a, L> {
         let mut recv_vec = Vec::with_capacity(self.recvbuf.len());
         loop {
             let s = try!(self.read());
-            recv_vec.push_all(self.recvbuf[0..s].as_slice());
+            recv_vec.push_all(&self.recvbuf[0..s]);
             if s < self.recvbuf.len() {
                 break;
             }
@@ -185,17 +192,17 @@ impl<'a, L: CrustyListener> CrustyBot<'a, L> {
         // Send the password if we need it
         match password {
             Some(p) => try!(self.send_raw(
-                            format!("PASS {} \r\n", p).as_slice())),
+                            &format!("PASS {} \r\n", p))),
             _ => ()
         }
-        let usercmd = format!("USER {} {} {} :{}\r\n",
+        let usercmd = &format!("USER {} {} {} :{}\r\n",
                               self.info.nick,
                               self.info.hostname,
                               self.info.servername,
                               self.info.realname);
-        let nickcmd = format!("NICK {} \r\n", self.info.nick);
-        try!(self.send_raw(usercmd.as_slice()));
-        try!(self.send_raw(nickcmd.as_slice()));
+        let nickcmd = &format!("NICK {} \r\n", self.info.nick);
+        try!(self.send_raw(usercmd));
+        try!(self.send_raw(nickcmd));
         // do a listen here in case server asks for PING or something
         self.listen_once();
         let action = self.listener.on_connect();
@@ -208,7 +215,7 @@ impl<'a, L: CrustyListener> CrustyBot<'a, L> {
     fn listen_once(&mut self) -> bool {
         match self.try_receive() {
             Ok(msg) => {
-                for cmd in msg.as_slice().lines_any().filter(|c| !c.is_empty()) {
+                for cmd in msg.lines_any().filter(|c| !c.is_empty()) {
                     self.dispatch_response(cmd);
                 }
                 !msg.is_empty()
