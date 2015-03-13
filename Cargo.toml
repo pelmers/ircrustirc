@@ -1,11 +1,11 @@
 [project]
 
-name = "crustirc"
+name = "ircrustirc"
 version = "0.0.1"
 authors = ["Peter Elmers <peter.elmers@yahoo.com>"]
 
 [lib]
-name = "crustirc"
+name = "ircrustirc"
 
 [[bin]]
 name = "debugbot"
